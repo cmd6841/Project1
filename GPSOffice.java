@@ -3,6 +3,7 @@ import java.rmi.NoSuchObjectException;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -21,7 +22,7 @@ public class GPSOffice implements GPSOfficeInterface {
 	private double ypos;
 	private RegistryProxy registry;
 	private List<String> allOffices;
-	private Map<String, Object> neighbors;
+	private Map<String, GPSOfficeInterface> neighbors;
 	
 	public GPSOffice(String[] args) throws IOException {
 		if ( args.length != 5 ) {
@@ -80,11 +81,22 @@ public class GPSOffice implements GPSOfficeInterface {
 		
 		allOffices = new ArrayList<String>();
 		allOffices = registry.list();
-		neighbors = new TreeMap<String, Object>();
+		neighbors = new TreeMap<String, GPSOfficeInterface>();
+		nearestDistances = new TreeMap<Double, String>();
 		
 		addNeighbors();
 	}
 
+	public double getX() {
+		return this.xpos;
+	}
+
+	public double getY() {
+		return this.ypos;
+	}
+
+	private Map<Double, String> nearestDistances;
+	
 	public void addNeighbors() {
 		if(allOffices.size() < 5) {
 			for (String office : allOffices) {
@@ -99,9 +111,39 @@ public class GPSOffice implements GPSOfficeInterface {
 				}
 			}
 		}
+		else {
+			String nearestNeighbor;
+			double nearestDistance = Double.MAX_VALUE;
+			for (String office : allOffices) {
+				if(!office.equals(name)) {
+					if(neighbors.size() < 3) {
+						try {
+							GPSOfficeInterface city = (GPSOfficeInterface) registry.lookup(office); 
+							neighbors.put(office, city);
+							double temp = distance(city.getX(), city.getY());
+							if(nearestDistance > temp) {
+								nearestDistance = temp;
+								nearestNeighbor = office;
+							}
+						} catch (RemoteException e) {
+							e.printStackTrace();
+						} catch (NotBoundException e) {
+							e.printStackTrace();
+						}
+					} else {
+						
+					}
+				}
+			}
+		}
 		System.out.println(neighbors);
 	}
 	
+	
+	private double distance(double x, double y) {
+		return Math.sqrt((x - xpos) * (x - xpos) + (y - ypos) * (y - ypos));
+	}
+
 	public void show() throws RemoteException {
 		allOffices = registry.list();
 		System.out.println(neighbors);
