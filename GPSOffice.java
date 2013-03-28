@@ -4,9 +4,9 @@ import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.Vector;
 
 import edu.rit.ds.registry.AlreadyBoundException;
 import edu.rit.ds.registry.NotBoundException;
@@ -22,7 +22,6 @@ public class GPSOffice implements GPSOfficeInterface {
 	private double ypos;
 	private RegistryProxy registry;
 	private List<String> allOffices;
-	private Map<String, GPSOfficeInterface> neighbors;
 	
 	public GPSOffice(String[] args) throws IOException {
 		if ( args.length != 5 ) {
@@ -81,9 +80,8 @@ public class GPSOffice implements GPSOfficeInterface {
 		
 		allOffices = new ArrayList<String>();
 		allOffices = registry.list();
-		neighbors = new TreeMap<String, GPSOfficeInterface>();
-		nearestDistances = new TreeMap<Double, String>();
-		
+		neighbors = new ArrayList<Pair>();
+		closest = new ArrayList<Pair>();
 		addNeighbors();
 	}
 
@@ -95,58 +93,65 @@ public class GPSOffice implements GPSOfficeInterface {
 		return this.ypos;
 	}
 
-	private Map<Double, String> nearestDistances;
-	
+	private List<Pair> neighbors;
+	private List<Pair> closest;
 	public void addNeighbors() {
-		if(allOffices.size() < 5) {
-			for (String office : allOffices) {
-				if(!office.equals(name)) {
-					try {
-						neighbors.put(office, (GPSOfficeInterface) registry.lookup(office));
-					} catch (RemoteException e) {
-						e.printStackTrace();
-					} catch (NotBoundException e) {
-						e.printStackTrace();
-					}
+		for (String office : allOffices) {
+			if(!office.equals(name)) {
+				GPSOfficeInterface node;
+				try {
+					node = (GPSOfficeInterface)registry.lookup(office);
+					double dist = getDistance(node.getX(), node.getY());
+					neighbors.add(new Pair(dist, node, office));
+				} catch (RemoteException e) {
+					e.printStackTrace();
+				} catch (NotBoundException e) {
+					e.printStackTrace();
 				}
 			}
 		}
-		else {
-			String nearestNeighbor;
-			double nearestDistance = Double.MAX_VALUE;
-			for (String office : allOffices) {
-				if(!office.equals(name)) {
-					if(neighbors.size() < 3) {
-						try {
-							GPSOfficeInterface city = (GPSOfficeInterface) registry.lookup(office); 
-							neighbors.put(office, city);
-							double temp = distance(city.getX(), city.getY());
-							if(nearestDistance > temp) {
-								nearestDistance = temp;
-								nearestNeighbor = office;
-							}
-						} catch (RemoteException e) {
-							e.printStackTrace();
-						} catch (NotBoundException e) {
-							e.printStackTrace();
-						}
-					} else {
-						
-					}
-				}
-			}
+		Collections.sort(neighbors);
+		if(neighbors.size() < 3) {
+			closest.addAll(neighbors);
+		} else {
+			closest.addAll(neighbors.subList(0, 3));
 		}
-		System.out.println(neighbors);
+		System.out.println(closest);
 	}
 	
 	
-	private double distance(double x, double y) {
+	private double getDistance(double x, double y) {
 		return Math.sqrt((x - xpos) * (x - xpos) + (y - ypos) * (y - ypos));
 	}
 
 	public void show() throws RemoteException {
-		allOffices = registry.list();
+		System.out.println(allOffices);
 		System.out.println(neighbors);
+		System.out.println(closest);
+	}
+	
+	public String toString() {
+		return name;
+	}
+	
+	private class Pair implements Comparable<Pair> {
+		public double distance;
+		public GPSOfficeInterface office;
+		public String name;
+		public Pair(double d, GPSOfficeInterface gpso, String n){
+			distance = d;
+			office = gpso;
+			name = n;
+		}
+		
+		@Override
+		public int compareTo(Pair o) {
+			return (int)(distance - o.distance);
+		}
+		
+		public String toString() {
+			return name + ": " + Double.toString(distance);
+		}
 	}
 
 }
