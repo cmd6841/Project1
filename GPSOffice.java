@@ -4,12 +4,13 @@ import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Vector;
 
 import edu.rit.ds.registry.AlreadyBoundException;
 import edu.rit.ds.registry.NotBoundException;
+import edu.rit.ds.registry.RegistryEvent;
+import edu.rit.ds.registry.RegistryEventFilter;
+import edu.rit.ds.registry.RegistryEventListener;
 import edu.rit.ds.registry.RegistryProxy;
 
 
@@ -22,6 +23,10 @@ public class GPSOffice implements GPSOfficeInterface {
 	private double ypos;
 	private RegistryProxy registry;
 	private List<String> allOffices;
+	private List<Pair> neighbors;
+	private List<Pair> closest;
+	private static RegistryEventListener registryListener;
+	private static RegistryEventFilter registryFilter;
 	
 	public GPSOffice(String[] args) throws IOException {
 		if ( args.length != 5 ) {
@@ -80,9 +85,24 @@ public class GPSOffice implements GPSOfficeInterface {
 		
 		allOffices = new ArrayList<String>();
 		allOffices = registry.list();
-		neighbors = new ArrayList<Pair>();
-		closest = new ArrayList<Pair>();
 		addNeighbors();
+		
+		registryListener = new RegistryEventListener() {
+			public void report(long seq, RegistryEvent event) throws RemoteException {
+				System.out.println(event.objectName());
+				allOffices = registry.list();
+				if(event.objectWasBound())
+					updateNeighbors(event.objectName());
+				else
+					deleteNeighbor(event.objectName());
+			}
+		};
+		UnicastRemoteObject.exportObject (registryListener, 0);
+		registryFilter = new RegistryEventFilter()
+		.reportType ("GPSOffice")
+		.reportBound()
+		.reportUnbound();
+		registry.addEventListener (registryListener, registryFilter);
 	}
 
 	public double getX() {
@@ -92,10 +112,10 @@ public class GPSOffice implements GPSOfficeInterface {
 	public double getY() {
 		return this.ypos;
 	}
-
-	private List<Pair> neighbors;
-	private List<Pair> closest;
+	
 	public void addNeighbors() {
+		neighbors = new ArrayList<Pair>();
+		closest = new ArrayList<Pair>();
 		for (String office : allOffices) {
 			if(!office.equals(name)) {
 				GPSOfficeInterface node;
@@ -116,10 +136,38 @@ public class GPSOffice implements GPSOfficeInterface {
 		} else {
 			closest.addAll(neighbors.subList(0, 3));
 		}
-		System.out.println(closest);
+		System.out.println("Updated neigbors: " + closest);
 	}
 	
+
+	public void deleteNeighbor(String office) {
+		for(Pair p : closest) {
+			if (p.name.equals(office)) {
+				closest.remove(p);
+				break;
+			}
+		}
+		addNeighbors();
+	}
 	
+	public void updateNeighbors(String office) {
+		GPSOfficeInterface newOffice;
+		try {
+			newOffice = (GPSOfficeInterface) registry.lookup(office);
+			double newDistance = getDistance(newOffice.getX(), newOffice.getY());
+			closest.add(new Pair(newDistance, newOffice, office));
+			Collections.sort(closest);
+			if(closest.size() > 3) {
+				closest.remove(3);
+			}
+			System.out.println("Updated neigbors: " + closest);
+		} catch (RemoteException e) {
+			e.printStackTrace();
+		} catch (NotBoundException e) {
+			e.printStackTrace();
+		}
+	}
+
 	private double getDistance(double x, double y) {
 		return Math.sqrt((x - xpos) * (x - xpos) + (y - ypos) * (y - ypos));
 	}
