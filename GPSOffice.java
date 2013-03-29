@@ -88,13 +88,43 @@ public class GPSOffice implements GPSOfficeInterface {
 		addNeighbors();
 		
 		registryListener = new RegistryEventListener() {
-			public void report(long seq, RegistryEvent event) throws RemoteException {
+			public void report(long seq, final RegistryEvent event) throws RemoteException {
 				System.out.println(event.objectName());
 				allOffices = registry.list();
-				if(event.objectWasBound())
-					updateNeighbors(event.objectName());
-				else
-					deleteNeighbor(event.objectName());
+				if(event.objectWasBound()) {
+					new Thread(new Runnable() {
+						public void run() {
+							GPSOfficeInterface newOffice;
+							try {
+								newOffice = (GPSOfficeInterface) registry.lookup(event.objectName());
+								double newDistance = getDistance(newOffice.getX(), newOffice.getY());
+								closest.add(new Pair(newDistance, newOffice, event.objectName()));
+								Collections.sort(closest);
+								if(closest.size() > 3) {
+									closest.remove(3);
+								}
+								System.out.println("Updated neigbors: " + closest);
+							} catch (RemoteException e) {
+								e.printStackTrace();
+							} catch (NotBoundException e) {
+								e.printStackTrace();
+							}
+						}
+					}).start();
+				}
+				else {
+					new Thread(new Runnable() {
+						public void run() {
+							for(Pair p : closest) {
+								if (p.name.equals(event.objectName())) {
+									closest.remove(p);
+									break;
+								}
+							}
+							addNeighbors();
+						}
+					}).start();
+				}
 			}
 		};
 		UnicastRemoteObject.exportObject (registryListener, 0);
@@ -138,36 +168,7 @@ public class GPSOffice implements GPSOfficeInterface {
 		}
 		System.out.println("Updated neigbors: " + closest);
 	}
-	
-
-	public void deleteNeighbor(String office) {
-		for(Pair p : closest) {
-			if (p.name.equals(office)) {
-				closest.remove(p);
-				break;
-			}
-		}
-		addNeighbors();
-	}
-	
-	public void updateNeighbors(String office) {
-		GPSOfficeInterface newOffice;
-		try {
-			newOffice = (GPSOfficeInterface) registry.lookup(office);
-			double newDistance = getDistance(newOffice.getX(), newOffice.getY());
-			closest.add(new Pair(newDistance, newOffice, office));
-			Collections.sort(closest);
-			if(closest.size() > 3) {
-				closest.remove(3);
-			}
-			System.out.println("Updated neigbors: " + closest);
-		} catch (RemoteException e) {
-			e.printStackTrace();
-		} catch (NotBoundException e) {
-			e.printStackTrace();
-		}
-	}
-
+		
 	private double getDistance(double x, double y) {
 		return Math.sqrt((x - xpos) * (x - xpos) + (y - ypos) * (y - ypos));
 	}
@@ -194,7 +195,8 @@ public class GPSOffice implements GPSOfficeInterface {
 		
 		@Override
 		public int compareTo(Pair o) {
-			return (int)(distance - o.distance);
+			return ((distance - o.distance) == 0) ? 0 :
+						((distance - o.distance)>0.0) ? 1 : -1;
 		}
 		
 		public String toString() {
