@@ -1,4 +1,5 @@
 import java.io.IOException;
+import java.rmi.ConnectException;
 import java.rmi.NoSuchObjectException;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
@@ -153,6 +154,8 @@ public class GPSOffice implements GPSOfficeInterface {
 					node = (GPSOfficeInterface)registry.lookup(office);
 					double dist = getDistance(node.getX(), node.getY());
 					neighbors.add(new Pair(dist, node, office));
+				} catch (ConnectException e) {
+					continue;
 				} catch (RemoteException e) {
 					e.printStackTrace();
 				} catch (NotBoundException e) {
