@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import edu.rit.ds.RemoteEventGenerator;
+import edu.rit.ds.RemoteEventListener;
 import edu.rit.ds.registry.AlreadyBoundException;
 import edu.rit.ds.registry.NotBoundException;
 import edu.rit.ds.registry.RegistryEvent;
@@ -31,6 +33,7 @@ public class GPSOffice implements GPSOfficeInterface {
 	private RegistryEventListener registryListener;
 	private RegistryEventFilter registryFilter;
 	private ExecutorService executor;
+	private RemoteEventGenerator<PackageEvent> generator;
 
 	public GPSOffice(String[] args) throws IOException {
 		if (args.length != 5) {
@@ -148,7 +151,7 @@ public class GPSOffice implements GPSOfficeInterface {
 		registry.addEventListener(registryListener, registryFilter);
 
 		executor = Executors.newCachedThreadPool();
-
+		generator = new RemoteEventGenerator<PackageEvent>();
 	}
 
 	public double getX() {
@@ -228,10 +231,10 @@ public class GPSOffice implements GPSOfficeInterface {
 		}
 	}
 
-	public void show(final double destx, final double desty)
+	public void show(final double destx, final double desty,
+			final RemoteEventListener<PackageEvent> listener)
 			throws RemoteException {
-		examinePackage();
-		forwardPackage(createPackage(destx, desty), destx, desty);
+		forwardPackage(createPackage(destx, desty), destx, desty, listener);
 	}
 
 	private Package createPackage(double destx, double desty) {
@@ -241,8 +244,16 @@ public class GPSOffice implements GPSOfficeInterface {
 	private List<Pair> passer;
 
 	public void forwardPackage(final Package pack, final double destx,
-			final double desty) {
-		System.out.println("In city: " + name);
+			final double desty, final RemoteEventListener<PackageEvent> listener) {
+		try {
+			generator.addListener(listener);
+		} catch (RemoteException e1) {
+			e1.printStackTrace();
+		}
+		examinePackage(pack);
+		System.out.println("Package number "
+				+ Long.toString(pack.getTrackNumber()) + " arrived at " + name
+				+ " office");
 		passer = new ArrayList<Pair>();
 		passer.addAll(closest);
 		passer.add(new Pair(0, this, name, xpos, ypos));
@@ -256,17 +267,22 @@ public class GPSOffice implements GPSOfficeInterface {
 			}
 
 		});
-		if (passer.get(0).name.equals(name))
-			System.out.println("Package number <tracknum> delivered from "
+		if (passer.get(0).name.equals(name)) {
+			System.out.println("Package number "
+					+ Long.toString(pack.getTrackNumber()) + " delivered from "
 					+ name + " office to ( " + Double.toString(destx) + ", "
 					+ Double.toString(desty) + " )");
+			generator.reportEvent(new PackageEvent(pack, name, true));
+		}
 
 		else {
+			generator.reportEvent(new PackageEvent(pack, name, false));
 			executor.execute(new Runnable() {
 				@Override
 				public void run() {
 					try {
-						passer.get(0).office.forwardPackage(pack, destx, desty);
+						passer.get(0).office.forwardPackage(pack, destx, desty,
+								listener);
 					} catch (RemoteException e) {
 						e.printStackTrace();
 					}
@@ -275,8 +291,9 @@ public class GPSOffice implements GPSOfficeInterface {
 		}
 	}
 
-	private void examinePackage() {
+	private void examinePackage(Package pack) {
 		try {
+			generator.reportEvent(new PackageEvent(pack, name, false));
 			Thread.sleep(3000);
 		} catch (InterruptedException e) {
 			e.printStackTrace();
