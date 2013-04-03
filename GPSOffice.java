@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import edu.rit.ds.Lease;
 import edu.rit.ds.RemoteEventGenerator;
 import edu.rit.ds.RemoteEventListener;
 import edu.rit.ds.registry.AlreadyBoundException;
@@ -33,7 +34,7 @@ public class GPSOffice implements GPSOfficeInterface {
 	private RegistryEventListener registryListener;
 	private RegistryEventFilter registryFilter;
 	private ExecutorService executor;
-	private RemoteEventGenerator<PackageEvent> generator;
+	private RemoteEventGenerator<PackageEvent> hqGenerator;
 
 	public GPSOffice(String[] args) throws IOException {
 		if (args.length != 5) {
@@ -151,7 +152,8 @@ public class GPSOffice implements GPSOfficeInterface {
 		registry.addEventListener(registryListener, registryFilter);
 
 		executor = Executors.newCachedThreadPool();
-		generator = new RemoteEventGenerator<PackageEvent>();
+		
+		hqGenerator = new RemoteEventGenerator<PackageEvent>();
 	}
 
 	public double getX() {
@@ -245,11 +247,16 @@ public class GPSOffice implements GPSOfficeInterface {
 
 	public void forwardPackage(final Package pack, final double destx,
 			final double desty, final RemoteEventListener<PackageEvent> listener) {
+		RemoteEventGenerator<PackageEvent> generator = null;
 		try {
+			generator = new RemoteEventGenerator<PackageEvent>();
 			generator.addListener(listener);
+			generator.reportEvent(new PackageEvent(pack, name, false, false, true));
+			hqGenerator.reportEvent(new PackageEvent(pack, name, false, false, true));
 		} catch (RemoteException e1) {
 			e1.printStackTrace();
 		}
+		
 		examinePackage(pack);
 		System.out.println("Package number "
 				+ Long.toString(pack.getTrackNumber()) + " arrived at " + name
@@ -272,11 +279,15 @@ public class GPSOffice implements GPSOfficeInterface {
 					+ Long.toString(pack.getTrackNumber()) + " delivered from "
 					+ name + " office to ( " + Double.toString(destx) + ", "
 					+ Double.toString(desty) + " )");
-			generator.reportEvent(new PackageEvent(pack, name, true));
+			generator.reportEvent(new PackageEvent(pack, name, false, true, false));
+			hqGenerator.reportEvent(new PackageEvent(pack, name, false, true, false));
 		}
 
 		else {
-			generator.reportEvent(new PackageEvent(pack, name, false));
+			generator.reportEvent(new PackageEvent(pack, name, false, false, false));
+			hqGenerator.reportEvent(new PackageEvent(pack, name, false, false, false));
+			final RemoteEventGenerator<PackageEvent> finalGenerator = generator;
+			final RemoteEventGenerator<PackageEvent> finalHQGenerator = hqGenerator;
 			executor.execute(new Runnable() {
 				@Override
 				public void run() {
@@ -284,7 +295,11 @@ public class GPSOffice implements GPSOfficeInterface {
 						passer.get(0).office.forwardPackage(pack, destx, desty,
 								listener);
 					} catch (RemoteException e) {
-						e.printStackTrace();
+						System.out.println("Exception");
+						finalGenerator.reportEvent(new PackageEvent(pack, name, true, false, false));
+						finalHQGenerator.reportEvent(new PackageEvent(pack, name, true, false, false));
+					} catch (Exception e) {
+						System.out.println("Exception");
 					}
 				}
 			});
@@ -293,11 +308,19 @@ public class GPSOffice implements GPSOfficeInterface {
 
 	private void examinePackage(Package pack) {
 		try {
-			generator.reportEvent(new PackageEvent(pack, name, false));
 			Thread.sleep(3000);
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 		}
+	}
+
+	@Override
+	public Lease addListener(RemoteEventListener<PackageEvent> listener)
+			throws RemoteException {
+		System.out.println(listener);
+		Lease l = hqGenerator.addListener(listener);
+		System.out.println(l);
+		return l;
 	}
 
 }

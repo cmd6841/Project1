@@ -1,6 +1,7 @@
 import java.rmi.Remote;
 import java.rmi.RemoteException;
 
+import edu.rit.ds.Lease;
 import edu.rit.ds.RemoteEventListener;
 
 public interface GPSOfficeInterface extends Remote {
@@ -15,4 +16,6 @@ public interface GPSOfficeInterface extends Remote {
 			final double desty, RemoteEventListener<PackageEvent> listener)
 			throws RemoteException;
 
+	public Lease addListener(RemoteEventListener<PackageEvent> listener)
+			throws RemoteException;
 }
