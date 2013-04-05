@@ -1,3 +1,4 @@
+import java.io.Serializable;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 
@@ -8,73 +9,65 @@ import edu.rit.ds.registry.RegistryEventFilter;
 import edu.rit.ds.registry.RegistryEventListener;
 import edu.rit.ds.registry.RegistryProxy;
 
-public class Headquarters {
+public class Headquarters implements Serializable {
+
+	private static final long serialVersionUID = 1L;
 	private static String host;
 	private static int port;
 	private static Package pack;
-	private static String currentOffice;
-	private static double x;
-	private static double y;
+	// private static String currentOffice;
 	private static RegistryProxy registry;
 	private static RegistryEventListener registryListener;
 	private static RegistryEventFilter registryFilter;
-	private static final PackageEventListener listener = new PackageEventListener();;
 
 	public static void main(String[] args) {
 		if (args.length != 2) {
-			System.out.println("Usage: java Customer <host> <port>");
+			System.out.println("Usage: java Headquarters <host> <port>");
 			System.exit(0);
 		}
 		host = args[0];
-		port = Integer.parseInt(args[1]);
-
 		try {
-			UnicastRemoteObject.exportObject(listener, 0);
-			registry = new RegistryProxy("localhost", 2000);
+			port = Integer.parseInt(args[1]);
+		} catch (NumberFormatException nfe) {
+			throw new IllegalArgumentException(
+					"Headquarters: Invalid <port>: \"" + args[1] + "\"");
+		}
+		final PackageEventListener packageListener = new PackageEventListener();
+		try {
+			registry = new RegistryProxy(host, port);
 
 			registryListener = new RegistryEventListener() {
 
 				@Override
-				public void report(long seq, final RegistryEvent event)
+				public void report(long arg0, RegistryEvent event)
 						throws RemoteException {
-					if (event.objectWasBound()) {
-						new Thread(new Runnable() {
-							@Override
-							public void run() {
-								try {
-									GPSOfficeInterface office = (GPSOfficeInterface) registry
-											.lookup(event.objectName());
-									if (listener != null)
-										office.addListener(listener);
-								} catch (RemoteException e) {
-									e.printStackTrace();
-								} catch (NotBoundException e) {
-									e.printStackTrace();
-								}
-							}
-						}).start();
-					}
+					System.out.println(event.objectName());
+					listen(event.objectName(), packageListener);
 				}
-
 			};
 			UnicastRemoteObject.exportObject(registryListener, 0);
-			registryFilter = new RegistryEventFilter().reportType("GPSOffice")
-					.reportBound();
+
+			registryFilter = new RegistryEventFilter().reportType(
+					"GPSOfficeInterface").reportBound();
 			registry.addEventListener(registryListener, registryFilter);
 
-			addListener();
+			UnicastRemoteObject.exportObject(packageListener, 0);
+
+			for (String office : registry.list("GPSOfficeInterface")) {
+				listen(office, packageListener);
+			}
+
 		} catch (RemoteException e) {
 			e.printStackTrace();
 		}
 	}
 
-	private static void addListener() {
+	private static void listen(String office,
+			PackageEventListener packageListener) {
 		try {
-			for (String name : registry.list("GPSOffice")) {
-				GPSOfficeInterface office = (GPSOfficeInterface) registry
-						.lookup(name);
-				office.addListener(listener);
-			}
+			GPSOfficeInterface gps = (GPSOfficeInterface) registry
+					.lookup(office);
+			gps.addListener(packageListener);
 		} catch (RemoteException e) {
 			e.printStackTrace();
 		} catch (NotBoundException e) {
@@ -93,17 +86,16 @@ public class Headquarters {
 			if (pack == null) {
 				pack = event.pack;
 			}
-			currentOffice = event.currentOffice;
+			// currentOffice = event.currentOffice;
 			if (event.lost) {
 				System.out.println("Package number "
 						+ event.pack.getTrackNumber() + " lost by "
 						+ event.currentOffice + " office");
-			}
-			if (event.isDelivered) {
+			} else if (event.isDelivered) {
 				System.out.println("Package number "
 						+ event.pack.getTrackNumber() + " delivered from "
-						+ event.currentOffice + " office to (" + x + "," + y
-						+ ")");
+						+ event.currentOffice + " office to (" + pack.getX()
+						+ "," + pack.getY() + ")");
 			} else {
 				if (event.arrived) {
 					System.out.println("Package number "

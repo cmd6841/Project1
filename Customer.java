@@ -2,40 +2,71 @@ import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 
 import edu.rit.ds.RemoteEventListener;
+import edu.rit.ds.registry.NotBoundException;
 import edu.rit.ds.registry.RegistryProxy;
 
 public class Customer {
 
+	private static String host;
+	private static int port;
+	private static String name;
 	private static double x;
 	private static double y;
 	private static Package pack;
 	private static String currentOffice;
+	private static RegistryProxy proxy;
 
-	public static void main(String[] args) throws Exception {
+	public static void main(String[] args) {
 		if (args.length != 5) {
 			System.out
 					.println("Usage: java Customer <host> <port> <name> <X> <Y>");
 			System.exit(0);
 		}
-		x = Double.parseDouble(args[3]);
-		y = Double.parseDouble(args[4]);
+		host = args[0];
+		try {
+			port = Integer.parseInt(args[1]);
+		} catch (NumberFormatException nfe) {
+			throw new IllegalArgumentException("Customer: Invalid <port>: \""
+					+ args[1] + "\"");
+		}
+		name = args[2];
+		try {
+			x = Double.parseDouble(args[3]);
+		} catch (NumberFormatException nfe) {
+			throw new IllegalArgumentException("Customer: Invalid <X>: \""
+					+ args[3] + "\"");
+		}
+		try {
+			y = Double.parseDouble(args[4]);
+		} catch (NumberFormatException nfe) {
+			throw new IllegalArgumentException("Customer: Invalid <Y>: \""
+					+ args[4] + "\"");
+		}
 
-		RegistryProxy proxy = new RegistryProxy("localhost", 2000);
 		
 		PackageEventListener listener = new PackageEventListener();
-		UnicastRemoteObject.exportObject(listener, 0);
-		GPSOfficeInterface gps = (GPSOfficeInterface) proxy.lookup(args[2]);
 		try {
-		gps.show(x, y, listener);
+			UnicastRemoteObject.exportObject(listener, 0);
+		} catch (RemoteException e1) {
+			e1.printStackTrace();
+		}
+		GPSOfficeInterface gpsOffice;
+
+		try {
+			proxy = new RegistryProxy(host, port);
+			gpsOffice = (GPSOfficeInterface) proxy.lookup(name);
+			gpsOffice.show(x, y, listener);
 		} catch (RemoteException e) {
-			System.out.println("Package number "
-					+ pack.getTrackNumber() + " lost by "
-					+ currentOffice + " office");
+			System.out.println("Package number " + pack.getTrackNumber()
+					+ " lost by " + currentOffice + " office");
+			e.printStackTrace();
 			System.exit(0);
+		} catch (NotBoundException e1) {
+			e1.printStackTrace();
 		} catch (Exception e) {
-			System.out.println("Package number "
-					+ pack.getTrackNumber() + " lost by "
-					+ currentOffice + " office");
+			System.out.println("Package number " + pack.getTrackNumber()
+					+ " lost by " + currentOffice + " office");
+			e.printStackTrace();
 			System.exit(0);
 		}
 	}
@@ -56,8 +87,7 @@ public class Customer {
 						+ event.pack.getTrackNumber() + " lost by "
 						+ event.currentOffice + " office");
 				System.exit(0);
-			}
-			if (event.isDelivered) {
+			} else if (event.isDelivered) {
 				System.out.println("Package number "
 						+ event.pack.getTrackNumber() + " delivered from "
 						+ event.currentOffice + " office to (" + x + "," + y

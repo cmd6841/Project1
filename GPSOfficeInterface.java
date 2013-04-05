@@ -18,4 +18,5 @@ public interface GPSOfficeInterface extends Remote {
 
 	public Lease addListener(RemoteEventListener<PackageEvent> listener)
 			throws RemoteException;
+
 }

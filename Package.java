@@ -15,5 +15,12 @@ public class Package implements Serializable {
 	public long getTrackNumber() {
 		return this.trackNumber;
 	}
+	
+	public double getX() {
+		return x;
+	}
 
+	public double getY() {
+		return y;
+	}
 }
